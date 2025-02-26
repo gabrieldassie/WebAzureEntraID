@@ -24,6 +24,35 @@ namespace WebMvcAzureEntraID.Controllers
         {
             var user = await _graphServiceClient.Me.Request().GetAsync();
             ViewData["GraphApiResult"] = user.DisplayName;
+
+            // Obtém informações do tenant
+            var tenantId = User.FindFirst("http://schemas.microsoft.com/identity/claims/tenantid")?.Value;
+
+            try
+            {
+
+                // Obtém tentativas de login recentes
+                var signIns = await _graphServiceClient.AuditLogs.SignIns.Request().GetAsync();
+                ViewData["RecentSignIns"] = signIns;
+            }
+            catch (Exception)
+            {
+
+                ViewData["RecentSignIns"] = "Tenant does not have a premium license.";
+            }
+
+            // Obtém usuários do tenant
+            var users = await _graphServiceClient.Users.Request().GetAsync();
+            ViewData["Users"] = users;
+
+            // Obtém grupos do tenant
+            var groups = await _graphServiceClient.Groups.Request().GetAsync();
+            ViewData["Groups"] = groups;
+
+            // Adiciona TenantId ao ViewData
+            ViewData["TenantId"] = tenantId;
+
+
             return View();
         }
 
