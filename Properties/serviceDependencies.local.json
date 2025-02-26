@@ -1,8 +1,0 @@
-{
-  "dependencies": {
-    "identityapp1": {
-      "connectionInfo": "Registro do aplicativo: WebAzureEntraID, Locatário: Diretório Padrão (gabrieldassiehotmail.onmicrosoft.com - Microsoft Entra ID)",
-      "type": "identityapp.default"
-    }
-  }
-}
