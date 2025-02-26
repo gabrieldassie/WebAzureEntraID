@@ -1,6 +1,6 @@
 # WebAzureEntraID
 
-Este projeto utiliza WEB API, MVC, Blazor e autenticação com Azure Entra ID para fornecer informações sobre tentativas de login recentes, usuários do tenant, grupos do tenant e outras informações relevantes do Entra ID.
+Este projeto utiliza MVC e autenticação com Azure Entra ID para fornecer informações sobre tentativas de login recentes, usuários do tenant, grupos do tenant e outras informações relevantes do Entra ID.
 
 ## Funcionalidades
 
@@ -27,6 +27,7 @@ Este projeto utiliza WEB API, MVC, Blazor e autenticação com Azure Entra ID pa
 
 - .NET SDK 7.0 ou superior
 - Conta no Azure com permissões para acessar o Microsoft Entra ID
+- Licença Premium P1 ou P2 do Azure Active Directory (necessário para acessar recursos avançados como AuditLogs)
 
 ### Instalação
 
@@ -46,22 +47,41 @@ Este projeto utiliza WEB API, MVC, Blazor e autenticação com Azure Entra ID pa
    {
      "AzureAd": {
        "Instance": "https://login.microsoftonline.com/",
-       "Domain": "yourdomain.onmicrosoft.com",
-       "TenantId": "your-tenant-id",
-       "ClientId": "your-client-id",
-       "ClientSecret": "your-client-secret",
+       "Domain": "",
+       "TenantId": "",
+       "ClientId": "",
+       "ClientSecret": "",
        "CallbackPath": "/signin-oidc"
      },
      "MicrosoftGraph": {
+       "BaseUrl": "https://graph.microsoft.com/v1.0",
        "Scopes": "User.Read.All Group.Read.All AuditLog.Read.All"
      }
    }
    ```
 
-4. Execute o projeto:
-   ```bash
-   dotnet run
-   ```
+### Uso de Variáveis Seguras
+
+Para proteger suas credenciais, use o arquivo `appsettings.Development.json` para definir variáveis seguras durante o desenvolvimento. No arquivo `appsettings.json`, deixe os campos em branco para que sejam preenchidos durante o processo de CI/CD com as credenciais seguras.
+
+#### Exemplo de `appsettings.Development.json`:
+
+```json name=appsettings.Development.json
+{
+  "AzureAd": {
+    "Instance": "https://login.microsoftonline.com/",
+    "Domain": "yourdomain.onmicrosoft.com",
+    "TenantId": "your-tenant-id",
+    "ClientId": "your-client-id",
+    "ClientSecret": "your-client-secret",
+    "CallbackPath": "/signin-oidc"
+  },
+  "MicrosoftGraph": {
+    "BaseUrl": "https://graph.microsoft.com/v1.0",
+    "Scopes": "User.Read.All Group.Read.All AuditLog.Read.All"
+  }
+}
+```
 
 ### Estrutura do Projeto
 
@@ -76,10 +96,11 @@ Este projeto utiliza WEB API, MVC, Blazor e autenticação com Azure Entra ID pa
 
 #### Controlador `UserController.cs`
 
-```csharp
+```csharp name=Controllers/UserController.cs
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Graph;
+using System.Linq;
 using System.Security.Claims;
 using System.Threading.Tasks;
 
@@ -106,9 +127,20 @@ namespace WebAzureEntraID.Controllers
             // Obtém informações do tenant
             var tenantId = User.FindFirst("http://schemas.microsoft.com/identity/claims/tenantid")?.Value;
 
-            // Obtém tentativas de login recentes
-            var signIns = await _graphServiceClient.AuditLogs.SignIns.Request().GetAsync();
-            ViewData["RecentSignIns"] = signIns;
+            // Verifica se o tenant possui uma licença premium
+            var subscribedSkus = await _graphServiceClient.SubscribedSkus.Request().GetAsync();
+            var hasPremiumLicense = subscribedSkus.Any(sku => sku.SkuPartNumber.Contains("P1") || sku.SkuPartNumber.Contains("P2"));
+
+            if (hasPremiumLicense)
+            {
+                // Obtém tentativas de login recentes
+                var signIns = await _graphServiceClient.AuditLogs.SignIns.Request().GetAsync();
+                ViewData["RecentSignIns"] = signIns;
+            }
+            else
+            {
+                ViewData["RecentSignIns"] = "Tenant does not have a premium license.";
+            }
 
             // Obtém usuários do tenant
             var users = await _graphServiceClient.Users.Request().GetAsync();
@@ -148,12 +180,20 @@ namespace WebAzureEntraID.Controllers
 
 <div>
     <h3>Tentativas de Login Recentes</h3>
-    <ul>
-        @foreach (var signIn in ViewData["RecentSignIns"] as IEnumerable<Microsoft.Graph.SignIn>)
-        {
-            <li>@signIn.UserPrincipalName - @signIn.CreatedDateTime</li>
+    @if (ViewData["RecentSignIns"] is string)
+    {
+        <p>@ViewData["RecentSignIns"]</p>
+    }
+    else
+    {
+        <ul>
+            @foreach (var signIn in ViewData["RecentSignIns"] as IEnumerable<Microsoft.Graph.SignIn>)
+            {
+                <li>@signIn.UserPrincipalName - @signIn.CreatedDateTime</li>
+            }
         }
-    </ul>
+        </ul>
+    }
 </div>
 
 <div>
